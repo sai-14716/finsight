@@ -49,6 +49,7 @@ class TimeSeriesAnalyzer:
             
         self.df = pd.DataFrame(data)
         self.df['date'] = pd.to_datetime(self.df['date'])
+        self.df['amount'] = self.df['amount'].astype(float)
         self.df = self.df.rename(columns={'category__name': 'category'})
         self.df = self.df.sort_values('date')
         

@@ -21,9 +21,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-jxtbe+l1$7f%bw-2m7xr3-7-w$$9c^q#qj+pc3q^9nxbrcg4-5'
+DEBUG=True
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Plaid API Configuration
+PLAID_CLIENT_ID = '68f765b47c634d00204cd576'
+PLAID_SECRET = 'f0e1772e176a2b4a0d7ddf99fadf82'
+PLAID_ENV = 'sandbox'
+# Gemini API Configuration
+GEMINI_API_KEY = 'AIzaSyA1rSpdXW6VQYznD6tMzaYEGn9SN27vbWo'
+
 
 ALLOWED_HOSTS = []
 
@@ -84,13 +90,6 @@ DATABASES = {
     }
 }
 
-# Plaid API Configuration
-PLAID_CLIENT_ID = '68f765b47c634d00204cd576'
-PLAID_SECRET = 'f0e1772e176a2b4a0d7ddf99fadf82'
-PLAID_ENV = 'sandbox'
-
-# Gemini API Configuration
-GEMINI_API_KEY = 'your_gemini_api_key'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [

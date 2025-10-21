@@ -1,0 +1,106 @@
+<!-- plaid_link.html -->
+{% extends 'finance/base.html' %}
+
+{% block title %}Connect Bank Account - FinSIGHT{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="glass-card p-8 text-center">
+        <div class="bg-blue-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
+            <i class="fas fa-university text-blue-600 text-4xl"></i>
+        </div>
+        
+        <h1 class="text-3xl font-bold text-gray-800 mb-4">Connect Your Bank Account</h1>
+        <p class="text-gray-600 mb-8">
+            Securely link your bank account to automatically sync transactions and get personalized insights
+        </p>
+
+        <div class="bg-green-50 border border-green-200 rounded-lg p-6 mb-8 text-left">
+            <h3 class="font-semibold text-gray-800 mb-3 flex items-center">
+                <i class="fas fa-shield-alt text-green-600 mr-2"></i>
+                Your data is secure
+            </h3>
+            <ul class="space-y-2 text-sm text-gray-600">
+                <li class="flex items-start">
+                    <i class="fas fa-check text-green-600 mr-2 mt-1"></i>
+                    <span>Bank-level 256-bit encryption</span>
+                </li>
+                <li class="flex items-start">
+                    <i class="fas fa-check text-green-600 mr-2 mt-1"></i>
+                    <span>We never see your bank credentials</span>
+                </li>
+                <li class="flex items-start">
+                    <i class="fas fa-check text-green-600 mr-2 mt-1"></i>
+                    <span>Read-only access to your transactions</span>
+                </li>
+                <li class="flex items-start">
+                    <i class="fas fa-check text-green-600 mr-2 mt-1"></i>
+                    <span>Trusted by millions of users worldwide</span>
+                </li>
+            </ul>
+        </div>
+
+        <button id="link-button" 
+                class="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-8 py-4 rounded-lg font-semibold text-lg hover:shadow-lg transition">
+            <i class="fas fa-link mr-2"></i>Connect with Plaid
+        </button>
+
+        <p class="text-sm text-gray-500 mt-6">
+            <a href="{% url 'dashboard' %}" class="text-purple-600 hover:text-purple-700">
+                Skip for now
+            </a>
+        </p>
+    </div>
+</div>
+
+<!-- Plaid Link Script -->
+<script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+<script>
+    const linkToken = "{{ link_token }}";
+    
+    const handler = Plaid.create({
+        token: linkToken,
+        onSuccess: (public_token, metadata) => {
+            // Send the public_token to your server
+            showLoading();
+            fetch('/api/plaid/exchange-token/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken
+                },
+                body: JSON.stringify({
+                    public_token: public_token,
+                    metadata: metadata
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading();
+                if (data.success) {
+                    showNotification('Bank account connected successfully!', 'success');
+                    setTimeout(() => {
+                        window.location.href = '{% url "dashboard" %}';
+                    }, 1500);
+                } else {
+                    showNotification('Error connecting account', 'error');
+                }
+            })
+            .catch(error => {
+                hideLoading();
+                showNotification('Error connecting account', 'error');
+            });
+        },
+        onExit: (err, metadata) => {
+            if (err != null) {
+                console.error('Plaid Link Error:', err);
+                showNotification('Connection cancelled or failed', 'warning');
+            }
+        }
+    });
+
+    document.getElementById('link-button').addEventListener('click', () => {
+        handler.open();
+    });
+</script>
+{% endblock %}

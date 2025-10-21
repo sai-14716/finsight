@@ -1,0 +1,86 @@
+{% extends 'finance/base.html' %}
+
+{% block title %}Add Transaction - FinSIGHT{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="glass-card p-8">
+        <div class="mb-6">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">Add Manual Transaction</h1>
+            <p class="text-gray-600">Record a transaction that wasn't automatically synced</p>
+        </div>
+
+        <form method="POST" class="space-y-6">
+            {% csrf_token %}
+            
+            <div>
+                <label class="block text-gray-700 font-medium mb-2">
+                    <i class="fas fa-align-left mr-2 text-gray-400"></i>Description
+                </label>
+                {{ form.description }}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-gray-700 font-medium mb-2">
+                        <i class="fas fa-dollar-sign mr-2 text-gray-400"></i>Amount
+                    </label>
+                    {{ form.amount }}
+                </div>
+
+                <div>
+                    <label class="block text-gray-700 font-medium mb-2">
+                        <i class="fas fa-calendar mr-2 text-gray-400"></i>Date
+                    </label>
+                    {{ form.date }}
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-gray-700 font-medium mb-2">
+                    <i class="fas fa-tag mr-2 text-gray-400"></i>Category
+                </label>
+                {{ form.category }}
+            </div>
+
+            <div>
+                <label class="block text-gray-700 font-medium mb-2">
+                    <i class="fas fa-sticky-note mr-2 text-gray-400"></i>Notes (Optional)
+                </label>
+                {{ form.notes }}
+            </div>
+
+            <div class="flex space-x-4">
+                <button type="submit" 
+                        class="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3 rounded-lg font-semibold hover:shadow-lg transition">
+                    <i class="fas fa-save mr-2"></i>Save Transaction
+                </button>
+                <a href="{% url 'transactions' %}" 
+                   class="flex-1 text-center bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300 transition">
+                    <i class="fas fa-times mr-2"></i>Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    input, select, textarea {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #D1D5DB;
+        border-radius: 0.5rem;
+        font-size: 1rem;
+    }
+    input:focus, select:focus, textarea:focus {
+        outline: none;
+        ring: 2px;
+        ring-color: #9333EA;
+        border-color: transparent;
+    }
+    textarea {
+        min-height: 100px;
+        resize: vertical;
+    }
+</style>
+{% endblock %}

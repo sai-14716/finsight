@@ -1,0 +1,406 @@
+{% extends 'finance/base.html' %}
+
+{% block title %}Transactions & Analytics - FinSIGHT{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="glass-card p-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800 mb-2">Transactions & Analytics</h1>
+                <p class="text-gray-600">Manage and analyze your spending</p>
+            </div>
+            <div class="flex space-x-3">
+                <a href="{% url 'add_transaction' %}" class="bg-green-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-600 transition">
+                    <i class="fas fa-plus mr-2"></i>Add Transaction
+                </a>
+                <button onclick="loadAnalytics()" class="btn-primary text-white px-6 py-3 rounded-lg font-medium">
+                    <i class="fas fa-chart-bar mr-2"></i>View Analytics
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analytics Section -->
+    <div id="analyticsSection" class="hidden space-y-6">
+        <!-- Time Range Selector -->
+        <div class="glass-card p-6">
+            <div class="flex items-center justify-between">
+                <h3 class="text-xl font-bold text-gray-800">Analytics Dashboard</h3>
+                <div class="flex space-x-3">
+                    <button onclick="loadAnalytics(7)" class="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition">7 Days</button>
+                    <button onclick="loadAnalytics(30)" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">30 Days</button>
+                    <button onclick="loadAnalytics(90)" class="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition">90 Days</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analytics Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="glass-card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm font-medium">Total Spent</p>
+                        <h3 class="text-3xl font-bold text-gray-800 mt-2" id="analyticsTotalSpent">$0.00</h3>
+                    </div>
+                    <div class="bg-red-100 p-4 rounded-full">
+                        <i class="fas fa-arrow-down text-red-600 text-2xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm font-medium">Avg Per Transaction</p>
+                        <h3 class="text-3xl font-bold text-gray-800 mt-2" id="analyticsAvgTransaction">$0.00</h3>
+                    </div>
+                    <div class="bg-blue-100 p-4 rounded-full">
+                        <i class="fas fa-calculator text-blue-600 text-2xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm font-medium">Total Transactions</p>
+                        <h3 class="text-3xl font-bold text-gray-800 mt-2" id="analyticsTotalTxns">0</h3>
+                    </div>
+                    <div class="bg-green-100 p-4 rounded-full">
+                        <i class="fas fa-list text-green-600 text-2xl"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">Daily Spending Trend</h3>
+                <canvas id="dailySpendingChart"></canvas>
+            </div>
+
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">Category Breakdown</h3>
+                <canvas id="categoryBreakdownChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Monthly Comparison -->
+        <div class="glass-card p-6">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Monthly Comparison (Last 6 Months)</h3>
+            <canvas id="monthlyComparisonChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Transactions Table -->
+    <div class="glass-card p-6">
+        <div class="flex items-center justify-between mb-6">
+            <h3 class="text-xl font-bold text-gray-800">All Transactions</h3>
+            <div class="flex space-x-3">
+                <input type="text" id="searchTransactions" placeholder="Search transactions..." 
+                       class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                <select id="filterCategory" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                    <option value="">All Categories</option>
+                    {% for category in categories %}
+                    <option value="{{ category.name }}">{{ category.icon }} {{ category.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200" id="transactionsTableBody">
+                    {% for transaction in transactions %}
+                    <tr class="hover:bg-gray-50 transition">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {{ transaction.date|date:"M d, Y" }}
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-900">
+                            <div class="flex items-center">
+                                <i class="fas fa-shopping-cart text-gray-400 mr-2"></i>
+                                {{ transaction.description }}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <select class="category-select px-3 py-1 border border-gray-300 rounded-lg text-sm" 
+                                    data-transaction-id="{{ transaction.id }}">
+                                <option value="">Select Category</option>
+                                {% for category in categories %}
+                                <option value="{{ category.id }}" {% if transaction.category.id == category.id %}selected{% endif %}>
+                                    {{ category.icon }} {{ category.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                            ${{ transaction.amount }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            {% if transaction.is_recurring %}
+                            <span class="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">
+                                <i class="fas fa-repeat mr-1"></i>Recurring
+                            </span>
+                            {% endif %}
+                            {% if transaction.is_anomaly %}
+                            <span class="px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full">
+                                <i class="fas fa-exclamation-triangle mr-1"></i>Anomaly
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <button class="text-purple-600 hover:text-purple-800">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="px-6 py-8 text-center text-gray-500">
+                            No transactions found. Start by syncing with your bank!
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+let dailySpendingChart, categoryBreakdownChart, monthlyComparisonChart;
+
+// Category change handler
+document.addEventListener('DOMContentLoaded', function() {
+    // Category select change handlers
+    document.querySelectorAll('.category-select').forEach(select => {
+        select.addEventListener('change', function() {
+            updateTransactionCategory(this.dataset.transactionId, this.value);
+        });
+    });
+
+    // Search and filter handlers
+    document.getElementById('searchTransactions')?.addEventListener('input', filterTransactions);
+    document.getElementById('filterCategory')?.addEventListener('change', filterTransactions);
+});
+
+function updateTransactionCategory(transactionId, categoryId) {
+    fetch(`/transactions/${transactionId}/update-category/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken
+        },
+        body: JSON.stringify({ category_id: categoryId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Category updated successfully!', 'success');
+        } else {
+            showNotification('Error updating category', 'error');
+        }
+    })
+    .catch(error => {
+        showNotification('Error updating category', 'error');
+    });
+}
+
+function loadAnalytics(days = 30) {
+    showLoading();
+    document.getElementById('analyticsSection').classList.remove('hidden');
+    
+    fetch(`/api/analytics/spending/?days=${days}`, {
+        headers: {
+            'X-CSRFToken': csrftoken
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoading();
+        displayAnalytics(data);
+    })
+    .catch(error => {
+        hideLoading();
+        showNotification('Error loading analytics', 'error');
+    });
+}
+
+function displayAnalytics(data) {
+    // Update stats
+    document.getElementById('analyticsTotalSpent').textContent = formatCurrency(data.total_spending);
+    document.getElementById('analyticsTotalTxns').textContent = data.transaction_count;
+    const avgTransaction = data.transaction_count > 0 ? data.total_spending / data.transaction_count : 0;
+    document.getElementById('analyticsAvgTransaction').textContent = formatCurrency(avgTransaction);
+
+    // Daily Spending Chart
+    const ctx1 = document.getElementById('dailySpendingChart').getContext('2d');
+    if (dailySpendingChart) dailySpendingChart.destroy();
+    
+    dailySpendingChart = new Chart(ctx1, {
+        type: 'line',
+        data: {
+            labels: data.daily_spending.map(d => formatDate(d.date)),
+            datasets: [{
+                label: 'Daily Spending',
+                data: data.daily_spending.map(d => d.amount),
+                borderColor: 'rgb(102, 126, 234)',
+                backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                tension: 0.4,
+                fill: true,
+                pointRadius: 4,
+                pointHoverRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return 'Spent: ' + formatCurrency(context.parsed.y);
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return ' + value;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Category Breakdown Chart
+    const ctx2 = document.getElementById('categoryBreakdownChart').getContext('2d');
+    if (categoryBreakdownChart) categoryBreakdownChart.destroy();
+    
+    const categories = Object.keys(data.category_spending);
+    const amounts = Object.values(data.category_spending);
+    
+    categoryBreakdownChart = new Chart(ctx2, {
+        type: 'doughnut',
+        data: {
+            labels: categories,
+            datasets: [{
+                data: amounts,
+                backgroundColor: [
+                    '#667eea', '#764ba2', '#f093fb', '#4facfe',
+                    '#43e97b', '#fa709a', '#fee140', '#30cfd0',
+                    '#a8edea', '#fed6e3'
+                ],
+                borderWidth: 2,
+                borderColor: '#fff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { 
+                    position: 'right',
+                    labels: {
+                        padding: 15,
+                        font: { size: 12 }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = formatCurrency(context.parsed);
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((context.parsed / total) * 100).toFixed(1);
+                            return `${label}: ${value} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Monthly Comparison Chart
+    const ctx3 = document.getElementById('monthlyComparisonChart').getContext('2d');
+    if (monthlyComparisonChart) monthlyComparisonChart.destroy();
+    
+    monthlyComparisonChart = new Chart(ctx3, {
+        type: 'bar',
+        data: {
+            labels: data.monthly_comparison.map(m => m.month),
+            datasets: [{
+                label: 'Monthly Spending',
+                data: data.monthly_comparison.map(m => m.total),
+                backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                borderColor: 'rgb(102, 126, 234)',
+                borderWidth: 2,
+                borderRadius: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return 'Total: ' + formatCurrency(context.parsed.y);
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return ' + value;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function filterTransactions() {
+    const searchTerm = document.getElementById('searchTransactions').value.toLowerCase();
+    const categoryFilter = document.getElementById('filterCategory').value;
+    const rows = document.querySelectorAll('#transactionsTableBody tr');
+    
+    rows.forEach(row => {
+        const description = row.querySelector('td:nth-child(2)')?.textContent.toLowerCase() || '';
+        const category = row.querySelector('.category-select')?.selectedOptions[0]?.textContent || '';
+        
+        const matchesSearch = description.includes(searchTerm);
+        const matchesCategory = !categoryFilter || category.includes(categoryFilter);
+        
+        if (matchesSearch && matchesCategory) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+</script>
+{% endblock %}

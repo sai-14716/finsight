@@ -18,7 +18,7 @@ class AIInsightsService:
     def __init__(self):
         """Initialize Gemini API"""
         genai.configure(api_key=settings.GEMINI_API_KEY)
-        self.model = genai.GenerativeModel('gemini-pro')
+        self.model = genai.GenerativeModel('gemini-2.5-pro')
     
     def generate_monthly_insight(self, user) -> str:
         """

@@ -1,0 +1,136 @@
+{% extends 'finance/base.html' %}
+
+{% block title %}Financial Insights - FinSIGHT{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="glass-card p-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800 mb-2">
+                    <i class="fas fa-lightbulb text-yellow-500 mr-2"></i>Financial Insights
+                </h1>
+                <p class="text-gray-600">AI-powered recommendations and analysis</p>
+            </div>
+            <button onclick="generateNewInsight()" class="btn-primary text-white px-6 py-3 rounded-lg font-medium">
+                <i class="fas fa-brain mr-2"></i>Generate New Insight
+            </button>
+        </div>
+    </div>
+
+    <!-- Insights Grid -->
+    <div class="space-y-4">
+        {% for insight in insights %}
+        <div class="glass-card p-6 hover:shadow-xl transition">
+            <div class="flex items-start space-x-4">
+                <!-- Icon -->
+                <div class="flex-shrink-0">
+                    {% if insight.insight_type == 'monthly_summary' %}
+                    <div class="bg-blue-100 p-4 rounded-full">
+                        <i class="fas fa-chart-line text-blue-600 text-2xl"></i>
+                    </div>
+                    {% elif insight.insight_type == 'anomaly_alert' %}
+                    <div class="bg-red-100 p-4 rounded-full">
+                        <i class="fas fa-exclamation-triangle text-red-600 text-2xl"></i>
+                    </div>
+                    {% elif insight.insight_type == 'savings_tip' %}
+                    <div class="bg-green-100 p-4 rounded-full">
+                        <i class="fas fa-piggy-bank text-green-600 text-2xl"></i>
+                    </div>
+                    {% elif insight.insight_type == 'forecast' %}
+                    <div class="bg-purple-100 p-4 rounded-full">
+                        <i class="fas fa-crystal-ball text-purple-600 text-2xl"></i>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Content -->
+                <div class="flex-1">
+                    <div class="flex items-start justify-between mb-3">
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-800">
+                                {{ insight.get_insight_type_display }}
+                            </h3>
+                            <p class="text-sm text-gray-500 mt-1">
+                                <i class="fas fa-clock mr-1"></i>
+                                {{ insight.created_at|date:"F d, Y at h:i A" }}
+                            </p>
+                        </div>
+                        {% if not insight.is_read %}
+                        <span class="px-3 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded-full">
+                            NEW
+                        </span>
+                        {% endif %}
+                    </div>
+
+                    <p class="text-gray-700 leading-relaxed">
+                        {{ insight.insight_text }}
+                    </p>
+
+                    <!-- Action Buttons -->
+                    <div class="mt-4 flex space-x-3">
+                        {% if insight.insight_type == 'anomaly_alert' %}
+                        <button onclick="viewAnomalies()" 
+                                class="text-sm bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition">
+                            <i class="fas fa-search mr-1"></i>View Anomalies
+                        </button>
+                        {% elif insight.insight_type == 'forecast' %}
+                        <button onclick="viewDetailedForecast()" 
+                                class="text-sm bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition">
+                            <i class="fas fa-chart-area mr-1"></i>View Forecast
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="glass-card p-12 text-center">
+            <i class="fas fa-robot text-gray-300 text-6xl mb-4"></i>
+            <h3 class="text-xl font-bold text-gray-700 mb-2">No Insights Yet</h3>
+            <p class="text-gray-500 mb-6">Generate your first AI-powered financial insight</p>
+            <button onclick="generateNewInsight()" 
+                    class="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-8 py-3 rounded-lg font-semibold hover:shadow-lg transition">
+                <i class="fas fa-brain mr-2"></i>Generate Insight
+            </button>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+function generateNewInsight() {
+    showLoading();
+    fetch('/api/insights/generate/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrftoken
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoading();
+        if (data.success) {
+            showNotification('New insight generated!', 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showNotification('Error: ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        hideLoading();
+        showNotification('Error generating insight', 'error');
+    });
+}
+
+function viewAnomalies() {
+    window.location.href = '{% url "transactions" %}';
+}
+
+function viewDetailedForecast() {
+    // Trigger forecast modal from dashboard
+    window.location.href = '{% url "dashboard" %}#forecast';
+}
+</script>
+{% endblock %}

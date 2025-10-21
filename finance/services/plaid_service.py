@@ -112,8 +112,8 @@ class PlaidService:
             end_date = datetime.now().date()
             
             if force_full_sync or not profile.last_sync_date:
-                # Get last 90 days of transactions
-                start_date = end_date - timedelta(days=90)
+                # Get last 700 days of transactions
+                start_date = end_date - timedelta(days=700)
             else:
                 # Get transactions since last sync
                 start_date = profile.last_sync_date.date()

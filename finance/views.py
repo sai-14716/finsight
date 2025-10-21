@@ -25,6 +25,11 @@ from .forms import TransactionForm, UserProfileForm, RecurringPaymentForm
 from .services.plaid_service import get_plaid_service
 from .services.ai_insights import get_ai_insights_service
 from .services.time_series_analyzer import TimeSeriesAnalyzer, ForecastEngine
+from django.views.decorators.csrf import ensure_csrf_cookie
+from rest_framework import status
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -33,7 +38,9 @@ from .services.time_series_analyzer import TimeSeriesAnalyzer, ForecastEngine
 
 def register_view(request):
     """User registration view"""
+    print("Recieved the form")
     if request.method == 'POST':
+        print("Form is POST")
         form = UserCreationForm(request.POST)
         if form.is_valid():
             user = form.save()
@@ -42,9 +49,13 @@ def register_view(request):
             login(request, user)
             messages.success(request, 'Welcome to FinSIGHT! Your account has been created.')
             return redirect('dashboard')
+        else:
+            print("Form is not valid")
+            messages.error(request, 'Please correct the errors below.')
     else:
+        print("Form is GET")
         form = UserCreationForm()
-    
+        messages.error(request, 'Wrong API Call.')
     return render(request, 'finance/register.html', {'form': form})
 
 
@@ -227,16 +238,22 @@ def exchange_plaid_token(request):
 @permission_classes([IsAuthenticated])
 def sync_transactions(request):
     """Sync transactions from Plaid"""
-    plaid_service = get_plaid_service()
-    
-    force_sync = request.data.get('force_sync', False)
-    result = plaid_service.sync_transactions(request.user, force_full_sync=force_sync)
-    
-    if result['success']:
-        return Response(result)
-    else:
-        return Response(result, status=400)
-
+    try:
+        plaid_service = get_plaid_service()
+        force_sync = request.data.get('force_sync', False)
+        
+        result = plaid_service.sync_transactions(request.user, force_full_sync=force_sync)
+        
+        if result['success']:
+            return Response(result, status=status.HTTP_200_OK)
+        else:
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        logger.error(f"Sync error: {str(e)}")
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # ============================================================================
 # Analytics & EDA
@@ -246,58 +263,68 @@ def sync_transactions(request):
 @permission_classes([IsAuthenticated])
 def spending_analytics(request):
     """Get spending analytics data"""
-    user = request.user
-    
-    # Get date range from query params
-    days = int(request.query_params.get('days', 30))
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=days)
-    
-    # Initialize analyzer
-    analyzer = TimeSeriesAnalyzer(user)
-    analyzer.load_data(start_date=start_date, end_date=end_date)
-    
-    if analyzer.df is None or len(analyzer.df) == 0:
+    try:
+        user = request.user
+        
+        # Get date range from query params
+        days = int(request.query_params.get('days', 30))
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days)
+        
+        # Initialize analyzer
+        analyzer = TimeSeriesAnalyzer(user)
+        analyzer.load_data(start_date=start_date, end_date=end_date)
+        
+        if analyzer.df is None or len(analyzer.df) == 0:
+            return Response({
+                'message': 'No transactions found for this period',
+                'total_spending': 0,
+                'transaction_count': 0,
+                'category_spending': {},
+                'daily_spending': [],
+                'monthly_comparison': []
+            })
+        
+        # Category breakdown
+        category_spending = analyzer.df.groupby('category')['amount'].sum().to_dict()
+        
+        # Daily spending trend
+        daily_spending = analyzer.df.groupby('date')['amount'].sum().reset_index()
+        daily_spending['date'] = daily_spending['date'].astype(str)
+        
+        # Monthly comparison (last 6 months)
+        monthly_data = []
+        for i in range(6):
+            month_start = (end_date - timedelta(days=30*i)).replace(day=1)
+            month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+            
+            month_transactions = Transaction.objects.filter(
+                user=user,
+                date__gte=month_start,
+                date__lte=month_end
+            )
+            
+            total = sum(t.amount for t in month_transactions)
+            monthly_data.append({
+                'month': month_start.strftime('%b %Y'),
+                'total': float(total)
+            })
+        
+        monthly_data.reverse()
+        
         return Response({
-            'message': 'No transactions found for this period',
-            'data': {}
+            'category_spending': {k: float(v) for k, v in category_spending.items()},
+            'daily_spending': daily_spending.to_dict('records'),
+            'monthly_comparison': monthly_data,
+            'total_spending': float(analyzer.df['amount'].sum()),
+            'transaction_count': len(analyzer.df)
         })
-    
-    # Category breakdown
-    category_spending = analyzer.df.groupby('category')['amount'].sum().to_dict()
-    
-    # Daily spending trend
-    daily_spending = analyzer.df.groupby('date')['amount'].sum().reset_index()
-    daily_spending['date'] = daily_spending['date'].astype(str)
-    
-    # Monthly comparison (last 6 months)
-    monthly_data = []
-    for i in range(6):
-        month_start = (end_date - timedelta(days=30*i)).replace(day=1)
-        month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-        
-        month_transactions = Transaction.objects.filter(
-            user=user,
-            date__gte=month_start,
-            date__lte=month_end
-        )
-        
-        total = sum(t.amount for t in month_transactions)
-        monthly_data.append({
-            'month': month_start.strftime('%b %Y'),
-            'total': float(total)
-        })
-    
-    monthly_data.reverse()
-    
-    return Response({
-        'category_spending': {k: float(v) for k, v in category_spending.items()},
-        'daily_spending': daily_spending.to_dict('records'),
-        'monthly_comparison': monthly_data,
-        'total_spending': float(analyzer.df['amount'].sum()),
-        'transaction_count': len(analyzer.df)
-    })
-
+    except Exception as e:
+        logger.error(f"Analytics error: {str(e)}")
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # ============================================================================
 # Recurring Payments & Time Series Analysis
@@ -307,40 +334,57 @@ def spending_analytics(request):
 @permission_classes([IsAuthenticated])
 def detect_recurring_payments(request):
     """Run recurring payment detection"""
-    analyzer = TimeSeriesAnalyzer(request.user)
-    analyzer.load_data()
-    
-    patterns = analyzer.detect_recurring_patterns()
-    
-    # Create pending confirmations
-    for pattern in patterns:
-        # Check if already exists
-        exists = PendingRecurringConfirmation.objects.filter(
-            user=request.user,
-            description=pattern['description'],
-            amount=pattern['amount']
-        ).exists()
+    try:
+        analyzer = TimeSeriesAnalyzer(request.user)
+        analyzer.load_data()
         
-        if not exists:
-            confirmation = PendingRecurringConfirmation.objects.create(
+        if analyzer.df is None or len(analyzer.df) == 0:
+            return Response({
+                'success': True,
+                'patterns_found': 0,
+                'patterns': [],
+                'message': 'No transaction data available for analysis'
+            })
+        
+        patterns = analyzer.detect_recurring_patterns()
+        
+        # Create pending confirmations
+        created_count = 0
+        for pattern in patterns:
+            # Check if already exists
+            exists = PendingRecurringConfirmation.objects.filter(
                 user=request.user,
                 description=pattern['description'],
-                amount=pattern['amount'],
-                frequency=pattern['frequency'],
-                confidence_score=pattern['confidence']
-            )
+                amount=pattern['amount']
+            ).exists()
             
-            # Link related transactions
-            transactions = Transaction.objects.filter(
-                id__in=pattern['transaction_ids']
-            )
-            confirmation.related_transactions.set(transactions)
-    
-    return Response({
-        'success': True,
-        'patterns_found': len(patterns),
-        'patterns': patterns
-    })
+            if not exists:
+                confirmation = PendingRecurringConfirmation.objects.create(
+                    user=request.user,
+                    description=pattern['description'],
+                    amount=pattern['amount'],
+                    frequency=pattern['frequency'],
+                    confidence_score=pattern['confidence']
+                )
+                
+                # Link related transactions
+                transactions = Transaction.objects.filter(
+                    id__in=pattern['transaction_ids']
+                )
+                confirmation.related_transactions.set(transactions)
+                created_count += 1
+        
+        return Response({
+            'success': True,
+            'patterns_found': created_count,
+            'patterns': patterns
+        })
+    except Exception as e:
+        logger.error(f"Recurring detection error: {str(e)}")
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
@@ -435,46 +479,68 @@ def recurring_payments_view(request):
 @permission_classes([IsAuthenticated])
 def detect_anomalies(request):
     """Detect spending anomalies"""
-    analyzer = TimeSeriesAnalyzer(request.user)
-    analyzer.load_data()
-    
-    anomalies = analyzer.detect_anomalies()
-    threshold_info = analyzer.calculate_spending_threshold()
-    
-    # Mark anomalies in database
-    for anomaly in anomalies:
-        for txn_data in anomaly['transactions']:
-            Transaction.objects.filter(id=txn_data['id']).update(
-                is_anomaly=True,
-                anomaly_score=anomaly['z_score']
-            )
-    
-    return Response({
-        'success': True,
-        'anomalies': anomalies,
-        'threshold_info': threshold_info,
-        'anomaly_count': len(anomalies)
-    })
-
+    try:
+        analyzer = TimeSeriesAnalyzer(request.user)
+        analyzer.load_data()
+        
+        if analyzer.df is None or len(analyzer.df) == 0:
+            return Response({
+                'success': True,
+                'anomalies': [],
+                'threshold_info': {},
+                'anomaly_count': 0,
+                'message': 'No transaction data available for analysis'
+            })
+        
+        anomalies = analyzer.detect_anomalies()
+        threshold_info = analyzer.calculate_spending_threshold()
+        
+        # Mark anomalies in database
+        for anomaly in anomalies:
+            for txn_data in anomaly['transactions']:
+                Transaction.objects.filter(id=txn_data['id']).update(
+                    is_anomaly=True,
+                    anomaly_score=anomaly['z_score']
+                )
+        
+        return Response({
+            'success': True,
+            'anomalies': anomalies,
+            'threshold_info': threshold_info,
+            'anomaly_count': len(anomalies)
+        })
+    except Exception as e:
+        logger.error(f"Anomaly detection error: {str(e)}")
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_forecast(request):
     """Get next month's financial forecast"""
-    forecast_engine = ForecastEngine(request.user)
-    forecast = forecast_engine.forecast_next_month()
-    
-    # Convert dates to strings for JSON serialization
-    forecast['forecast_period']['start'] = forecast['forecast_period']['start'].isoformat()
-    forecast['forecast_period']['end'] = forecast['forecast_period']['end'].isoformat()
-    
-    for payment in forecast['payment_schedule']:
-        payment['date'] = payment['date'].isoformat()
-    
-    return Response({
-        'success': True,
-        'forecast': forecast
-    })
+    try:
+        forecast_engine = ForecastEngine(request.user)
+        forecast = forecast_engine.forecast_next_month()
+        
+        # Convert dates to strings for JSON serialization
+        forecast['forecast_period']['start'] = forecast['forecast_period']['start'].isoformat()
+        forecast['forecast_period']['end'] = forecast['forecast_period']['end'].isoformat()
+        
+        for payment in forecast['payment_schedule']:
+            payment['date'] = payment['date'].isoformat()
+        
+        return Response({
+            'success': True,
+            'forecast': forecast
+        })
+    except Exception as e:
+        logger.error(f"Forecast error: {str(e)}")
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # ============================================================================
@@ -485,28 +551,32 @@ def get_forecast(request):
 @permission_classes([IsAuthenticated])
 def generate_insights(request):
     """Generate AI-powered financial insights"""
-    ai_service = get_ai_insights_service()
-    
     try:
+        ai_service = get_ai_insights_service()
         insight = ai_service.generate_monthly_insight(request.user)
         
         return Response({
             'success': True,
             'insight': insight
         })
-    
     except Exception as e:
+        logger.error(f"Insights generation error: {str(e)}")
         return Response({
             'success': False,
             'error': str(e)
-        }, status=500)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @login_required
 def insights_view(request):
     """View all insights"""
-    insights = FinancialInsight.objects.filter(user=request.user).order_by('-created_at')[:20]
-    
+    insights_ids = FinancialInsight.objects.filter(
+        user=request.user
+    ).order_by('-created_at').values_list('id', flat=True)[:20]
+
+    insights = FinancialInsight.objects.filter(
+        id__in=list(insights_ids)
+    ).order_by('-created_at')
     # Mark as read
     insights.update(is_read=True)
     
@@ -521,90 +591,112 @@ def insights_view(request):
 @permission_classes([IsAuthenticated])
 def dashboard_data(request):
     """Get all dashboard data in one API call"""
-    user = request.user
-    
-    # Get spending analytics
-    analyzer = TimeSeriesAnalyzer(user)
-    analyzer.load_data(start_date=datetime.now() - timedelta(days=30))
-    
-    if analyzer.df is not None and len(analyzer.df) > 0:
-        category_spending = analyzer.df.groupby('category')['amount'].sum().to_dict()
-        total_spending = float(analyzer.df['amount'].sum())
-    else:
-        category_spending = {}
-        total_spending = 0
-    
-    # Get forecast
-    forecast_engine = ForecastEngine(user)
-    forecast = forecast_engine.forecast_next_month()
-    
-    # Convert dates
-    forecast['forecast_period']['start'] = forecast['forecast_period']['start'].isoformat()
-    forecast['forecast_period']['end'] = forecast['forecast_period']['end'].isoformat()
-    for payment in forecast['payment_schedule']:
-        payment['date'] = payment['date'].isoformat()
-    
-    # Get anomalies
-    anomalies = analyzer.detect_anomalies()
-    
-    # Get threshold
-    threshold_info = analyzer.calculate_spending_threshold()
-    
-    # Get profile
-    profile = UserProfile.objects.get(user=user)
-    
-    # Get recent transactions
-    recent_transactions = Transaction.objects.filter(user=user).order_by('-date')[:10]
-    transactions_data = [
-        {
-            'id': t.id,
-            'description': t.description,
-            'amount': float(t.amount),
-            'date': t.date.isoformat(),
-            'category': t.category.name if t.category else 'Uncategorized',
-            'is_recurring': t.is_recurring,
-            'is_anomaly': t.is_anomaly
-        }
-        for t in recent_transactions
-    ]
-    
-    # Get pending confirmations
-    pending = PendingRecurringConfirmation.objects.filter(user=user)
-    pending_data = [
-        {
-            'id': p.id,
-            'description': p.description,
-            'amount': float(p.amount),
-            'frequency': p.frequency,
-            'confidence': p.confidence_score
-        }
-        for p in pending
-    ]
-    
-    # Get latest insight
-    latest_insight = FinancialInsight.objects.filter(user=user).first()
-    
-    return Response({
-        'profile': {
-            'savings_goal': float(profile.monthly_savings_goal),
-            'goal_description': profile.financial_goal_description,
-            'last_sync': profile.last_sync_date.isoformat() if profile.last_sync_date else None
-        },
-        'spending': {
-            'total_last_30_days': total_spending,
-            'by_category': {k: float(v) for k, v in category_spending.items()}
-        },
-        'forecast': forecast,
-        'anomalies': {
-            'count': len(anomalies),
-            'threshold': threshold_info,
-            'recent': anomalies[:5]
-        },
-        'recent_transactions': transactions_data,
-        'pending_confirmations': pending_data,
-        'latest_insight': {
-            'text': latest_insight.insight_text,
-            'type': latest_insight.insight_type,
-            'created_at': latest_insight.created_at.isoformat()
-        } if latest_insight else None
-    })
+    try:
+        user = request.user
+        
+        # Get spending analytics
+        analyzer = TimeSeriesAnalyzer(user)
+        analyzer.load_data(start_date=datetime.now() - timedelta(days=30))
+        
+        if analyzer.df is not None and len(analyzer.df) > 0:
+            category_spending = analyzer.df.groupby('category')['amount'].sum().to_dict()
+            total_spending = float(analyzer.df['amount'].sum())
+        else:
+            category_spending = {}
+            total_spending = 0
+        
+        # Get forecast
+        try:
+            forecast_engine = ForecastEngine(user)
+            forecast = forecast_engine.forecast_next_month()
+            
+            # Convert dates
+            forecast['forecast_period']['start'] = forecast['forecast_period']['start'].isoformat()
+            forecast['forecast_period']['end'] = forecast['forecast_period']['end'].isoformat()
+            for payment in forecast['payment_schedule']:
+                payment['date'] = payment['date'].isoformat()
+        except Exception as e:
+            logger.warning(f"Forecast generation failed: {str(e)}")
+            forecast = {
+                'predicted_spending': 0,
+                'forecast_period': {
+                    'start': datetime.now().isoformat(),
+                    'end': (datetime.now() + timedelta(days=30)).isoformat()
+                },
+                'breakdown': {'fixed_payments': 0, 'variable_spending': 0},
+                'payment_schedule': []
+            }
+        
+        # Get anomalies
+        try:
+            anomalies = analyzer.detect_anomalies()
+            threshold_info = analyzer.calculate_spending_threshold()
+        except Exception as e:
+            logger.warning(f"Anomaly detection failed: {str(e)}")
+            anomalies = []
+            threshold_info = {}
+        
+        # Get profile
+        profile = UserProfile.objects.get(user=user)
+        
+        # Get recent transactions
+        recent_transactions = Transaction.objects.filter(user=user).order_by('-date')[:10]
+        transactions_data = [
+            {
+                'id': t.id,
+                'description': t.description,
+                'amount': float(t.amount),
+                'date': t.date.isoformat(),
+                'category': t.category.name if t.category else 'Uncategorized',
+                'is_recurring': t.is_recurring,
+                'is_anomaly': t.is_anomaly
+            }
+            for t in recent_transactions
+        ]
+        
+        # Get pending confirmations
+        pending = PendingRecurringConfirmation.objects.filter(user=user)
+        pending_data = [
+            {
+                'id': p.id,
+                'description': p.description,
+                'amount': float(p.amount),
+                'frequency': p.frequency,
+                'confidence': p.confidence_score
+            }
+            for p in pending
+        ]
+        
+        # Get latest insight
+        latest_insight = FinancialInsight.objects.filter(user=user).first()
+        
+        return Response({
+            'profile': {
+                'savings_goal': float(profile.monthly_savings_goal),
+                'goal_description': profile.financial_goal_description,
+                'last_sync': profile.last_sync_date.isoformat() if profile.last_sync_date else None
+            },
+            'spending': {
+                'total_last_30_days': total_spending,
+                'by_category': {k: float(v) for k, v in category_spending.items()}
+            },
+            'forecast': forecast,
+            'anomalies': {
+                'count': len(anomalies),
+                'threshold': threshold_info,
+                'recent': anomalies[:5]
+            },
+            'recent_transactions': transactions_data,
+            'pending_confirmations': pending_data,
+            'latest_insight': {
+                'text': latest_insight.insight_text,
+                'type': latest_insight.insight_type,
+                'created_at': latest_insight.created_at.isoformat()
+            } if latest_insight else None
+        })
+    except Exception as e:
+        logger.error(f"Dashboard data error: {str(e)}")
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

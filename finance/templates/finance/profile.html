@@ -1,0 +1,197 @@
+{% extends 'finance/base.html' %}
+
+{% block title %}Profile Settings - FinSIGHT{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+    <!-- Profile Header -->
+    <div class="glass-card p-6">
+        <div class="flex items-center space-x-6">
+            <div class="bg-gradient-to-br from-purple-500 to-pink-500 w-24 h-24 rounded-full flex items-center justify-center text-white text-4xl font-bold">
+                {{ user.username|slice:":1"|upper }}
+            </div>
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800">{{ user.username }}</h1>
+                <p class="text-gray-600">{{ user.email }}</p>
+                <p class="text-sm text-gray-500 mt-1">
+                    <i class="fas fa-calendar-alt mr-1"></i>
+                    Member since {{ user.date_joined|date:"F Y" }}
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Financial Goals -->
+    <div class="glass-card p-6">
+        <h2 class="text-2xl font-bold text-gray-800 mb-6">
+            <i class="fas fa-bullseye text-purple-600 mr-2"></i>Financial Goals
+        </h2>
+
+        <form method="POST" class="space-y-6">
+            {% csrf_token %}
+            
+            <div>
+                <label class="block text-gray-700 font-medium mb-2">
+                    Monthly Savings Goal
+                </label>
+                <div class="relative">
+                    <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-lg">$</span>
+                    {{ form.monthly_savings_goal }}
+                </div>
+                <p class="text-sm text-gray-500 mt-1">Set your target monthly savings amount</p>
+            </div>
+
+            <div>
+                <label class="block text-gray-700 font-medium mb-2">
+                    Financial Goal Description
+                </label>
+                {{ form.financial_goal_description }}
+                <p class="text-sm text-gray-500 mt-1">What are you saving for? (e.g., "Down payment for a house", "Emergency fund")</p>
+            </div>
+
+            <button type="submit" 
+                    class="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-8 py-3 rounded-lg font-semibold hover:shadow-lg transition">
+                <i class="fas fa-save mr-2"></i>Save Changes
+            </button>
+        </form>
+    </div>
+
+    <!-- Plaid Connection -->
+    <div class="glass-card p-6">
+        <h2 class="text-2xl font-bold text-gray-800 mb-6">
+            <i class="fas fa-university text-blue-600 mr-2"></i>Bank Connection
+        </h2>
+
+        {% if profile.plaid_access_token %}
+        <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-check-circle text-green-600 text-2xl"></i>
+                    <div>
+                        <h3 class="font-semibold text-gray-800">Bank Account Connected</h3>
+                        <p class="text-sm text-gray-600">
+                            Last synced: {% if profile.last_sync_date %}{{ profile.last_sync_date|date:"F d, Y at h:i A" }}{% else %}Never{% endif %}
+                        </p>
+                    </div>
+                </div>
+                <button onclick="syncNow()" class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition">
+                    <i class="fas fa-sync-alt mr-2"></i>Sync Now
+                </button>
+            </div>
+        </div>
+        {% else %}
+        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+            <div class="flex items-center space-x-3 mb-4">
+                <i class="fas fa-info-circle text-yellow-600 text-2xl"></i>
+                <div>
+                    <h3 class="font-semibold text-gray-800">No Bank Connected</h3>
+                    <p class="text-sm text-gray-600">Connect your bank account to automatically sync transactions</p>
+                </div>
+            </div>
+            <a href="{% url 'plaid_link' %}" 
+               class="inline-block bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition">
+                <i class="fas fa-link mr-2"></i>Connect Bank Account
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Statistics -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="glass-card p-6 text-center">
+            <div class="bg-purple-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3">
+                <i class="fas fa-calendar-check text-purple-600 text-2xl"></i>
+            </div>
+            <h3 class="text-2xl font-bold text-gray-800">{{ user.transactions.count }}</h3>
+            <p class="text-gray-600 text-sm">Total Transactions</p>
+        </div>
+
+        <div class="glass-card p-6 text-center">
+            <div class="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3">
+                <i class="fas fa-repeat text-blue-600 text-2xl"></i>
+            </div>
+            <h3 class="text-2xl font-bold text-gray-800">{{ user.recurring_payments.count }}</h3>
+            <p class="text-gray-600 text-sm">Recurring Payments</p>
+        </div>
+
+        <div class="glass-card p-6 text-center">
+            <div class="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3">
+                <i class="fas fa-lightbulb text-green-600 text-2xl"></i>
+            </div>
+            <h3 class="text-2xl font-bold text-gray-800">{{ user.insights.count }}</h3>
+            <p class="text-gray-600 text-sm">AI Insights Generated</p>
+        </div>
+    </div>
+
+    <!-- Danger Zone -->
+    <div class="glass-card p-6 border-2 border-red-200">
+        <h2 class="text-2xl font-bold text-red-600 mb-4">
+            <i class="fas fa-exclamation-triangle mr-2"></i>Danger Zone
+        </h2>
+        <p class="text-gray-600 mb-4">These actions are irreversible. Please be careful.</p>
+        <button onclick="confirmDeleteAccount()" 
+                class="bg-red-500 text-white px-6 py-2 rounded-lg hover:bg-red-600 transition">
+            <i class="fas fa-trash mr-2"></i>Delete Account
+        </button>
+    </div>
+</div>
+
+<script>
+function syncNow() {
+    showLoading();
+    fetch('/api/plaid/sync/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken
+        },
+        body: JSON.stringify({ force_sync: false })
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoading();
+        if (data.success) {
+            showNotification(`Synced ${data.added} new transactions!`, 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showNotification('Sync failed', 'error');
+        }
+    })
+    .catch(error => {
+        hideLoading();
+        showNotification('Error syncing', 'error');
+    });
+}
+
+function confirmDeleteAccount() {
+    if (confirm('Are you ABSOLUTELY sure? This will permanently delete your account and all data. This action cannot be undone.')) {
+        if (confirm('Last chance! Type DELETE to confirm (just kidding, click OK one more time)')) {
+            showNotification('Account deletion not implemented in demo', 'info');
+        }
+    }
+}
+</script>
+
+<style>
+    input, select, textarea {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #D1D5DB;
+        border-radius: 0.5rem;
+        font-size: 1rem;
+    }
+    input[type="number"] {
+        padding-left: 2rem;
+    }
+    input:focus, select:focus, textarea:focus {
+        outline: none;
+        ring: 2px;
+        ring-color: #9333EA;
+        border-color: transparent;
+    }
+    textarea {
+        min-height: 120px;
+        resize: vertical;
+    }
+</style>
+{% endblock %}
