@@ -25,6 +25,7 @@ urlpatterns = [
     
     # Plaid Integration
     path('plaid/link/', views.plaid_link_view, name='plaid_link'),
+    path('api/plaid/create-sandbox-token/', views.create_sandbox_token, name='create_sandbox_token'),
     path('api/plaid/exchange-token/', views.exchange_plaid_token, name='exchange_plaid_token'),
     path('api/plaid/sync/', views.sync_transactions, name='sync_transactions'),
     

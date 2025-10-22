@@ -1,4 +1,3 @@
-<!-- plaid_link.html -->
 {% extends 'finance/base.html' %}
 
 {% block title %}Connect Bank Account - FinSIGHT{% endblock %}
@@ -41,10 +40,14 @@
         </div>
 
         <button id="link-button" 
-                class="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-8 py-4 rounded-lg font-semibold text-lg hover:shadow-lg transition">
+                class="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-8 py-4 rounded-lg font-semibold text-lg hover:shadow-lg transition w-full">
             <i class="fas fa-link mr-2"></i>Connect with Plaid
         </button>
 
+        <button id="sandbox-button"
+                class="mt-4 bg-transparent border-2 border-blue-500 text-blue-600 px-8 py-3 rounded-lg font-semibold text-md hover:bg-blue-50 transition w-full">
+            <i class="fas fa-cogs mr-2"></i>Use Sandbox (Dev)
+        </button>
         <p class="text-sm text-gray-500 mt-6">
             <a href="{% url 'dashboard' %}" class="text-purple-600 hover:text-purple-700">
                 Skip for now
@@ -53,11 +56,11 @@
     </div>
 </div>
 
-<!-- Plaid Link Script -->
 <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
 <script>
     const linkToken = "{{ link_token }}";
     
+    // --- Logic for the *REAL* Plaid Link Button ---
     const handler = Plaid.create({
         token: linkToken,
         onSuccess: (public_token, metadata) => {
@@ -102,5 +105,39 @@
     document.getElementById('link-button').addEventListener('click', () => {
         handler.open();
     });
+
+
+    // --- 2. ADD JAVASCRIPT FOR THE *SANDBOX* BUTTON ---
+    document.getElementById('sandbox-button').addEventListener('click', () => {
+        showLoading();
+        // This fetch calls a *new* endpoint that you will create
+        fetch('/api/plaid/create-sandbox-token/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken // Assumes csrftoken is globally available
+            },
+            // No body is needed, the backend just needs the authenticated user
+        })
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            if (data.success) {
+                showNotification('Sandbox account created successfully!', 'success');
+                // Redirect to dashboard just like the real flow
+                setTimeout(() => {
+                    window.location.href = '{% url "dashboard" %}';
+                }, 1500);
+            } else {
+                showNotification('Error creating sandbox account: ' + (data.error || 'Unknown error'), 'error');
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            console.error('Sandbox Fetch Error:', error);
+            showNotification('Error creating sandbox account', 'error');
+        });
+    });
+    // ------------------------------------------------
 </script>
 {% endblock %}

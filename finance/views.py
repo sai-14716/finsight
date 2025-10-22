@@ -233,6 +233,40 @@ def exchange_plaid_token(request):
     except Exception as e:
         return Response({'error': str(e)}, status=500)
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_sandbox_token(request):
+    """
+    [DEVELOPMENT ONLY]
+    Creates a sandbox access token directly, bypassing Plaid Link.
+    This is called by the 'Use Sandbox (Dev)' button.
+    """
+    try:
+        service = get_plaid_service()
+        
+        # This service method creates and saves the sandbox token
+        result = service.create_sandbox_access_token_for_user(request.user)
+        
+        if result.get('success'):
+            return Response({
+                'success': True,
+                'message': 'Sandbox account created successfully.'
+            }, status=status.HTTP_200_OK)
+        else:
+            # Service call failed (e.g., Plaid API error)
+            return Response({
+                'success': False,
+                'error': result.get('error', 'Failed to create sandbox token.')
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    except Exception as e:
+        # Catch any other unexpected errors
+        logger.error(f"Error in create_sandbox_token view: {str(e)}")
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+# ------------------------------------
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
