@@ -13,7 +13,8 @@ urlpatterns = [
     path('logout/', views.logout_view, name='logout'),
     
     # Dashboard & Profile
-    path('', views.dashboard_view, name='dashboard'),
+    path('', views.login_view, name='home'),
+    path('dashboard/', views.dashboard_view, name='dashboard'),
     path('profile/', views.profile_view, name='profile'),
     
     # Transactions

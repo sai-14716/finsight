@@ -675,24 +675,27 @@ function displayForecast(forecast) {
     const modal = document.getElementById('forecastModal');
     const content = document.getElementById('forecastContent');
     
+    // Fallback for the period object, just in case
+    const period = forecast.forecast_period || {};
+
     content.innerHTML = `
         <div class="space-y-6">
             <div class="bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg p-6">
                 <h3 class="text-2xl font-bold mb-2">Predicted Spending</h3>
-                <p class="text-4xl font-bold">${formatCurrency(forecast.predicted_spending || 0)}</p>
+                <p class="text-4xl font-bold">${formatCurrency(forecast.total_forecast || 0)}</p>
                 <p class="text-sm opacity-90 mt-2">
-                    Period: ${formatDate(forecast.forecast_period.start)} - ${formatDate(forecast.forecast_period.end)}
+                    Period: ${formatDate(period.start)} - ${formatDate(period.end)}
                 </p>
             </div>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="bg-blue-50 rounded-lg p-4">
                     <p class="text-sm text-gray-600 mb-1">Fixed Payments</p>
-                    <p class="text-2xl font-bold text-blue-600">${formatCurrency(forecast.breakdown?.fixed_payments || 0)}</p>
+                    <p class="text-2xl font-bold text-blue-600">${formatCurrency(forecast.deterministic_spend || 0)}</p>
                 </div>
                 <div class="bg-green-50 rounded-lg p-4">
                     <p class="text-sm text-gray-600 mb-1">Variable Spending</p>
-                    <p class="text-2xl font-bold text-green-600">${formatCurrency(forecast.breakdown?.variable_spending || 0)}</p>
+                    <p class="text-2xl font-bold text-green-600">${formatCurrency(forecast.projected_discretionary || 0)}</p>
                 </div>
             </div>
             
@@ -713,6 +716,7 @@ function displayForecast(forecast) {
         </div>
     `;
     
+    // This line will now be reached successfully!
     modal.classList.remove('hidden');
 }
 
