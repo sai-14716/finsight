@@ -44,6 +44,11 @@ urlpatterns = [
     # AI Insights
     path('insights/', views.insights_view, name='insights'),
     path('api/insights/generate/', views.generate_insights, name='generate_insights'),
+    path('api/ai/chat/summarize/<str:session_id>/', views.ai_chat_summarize, name='ai_chat_summarize'),
+    path('api/ai/chat/<str:session_id>/apply-goals/', views.ai_chat_apply_goals, name='ai_chat_apply_goals'),
+    # AI Chat endpoints
+    path('api/ai/chat/start/', views.ai_chat_start, name='ai_chat_start'),
+    path('api/ai/chat/<str:session_id>/message/', views.ai_chat_message, name='ai_chat_message'),
     
     # Dashboard Data API
     path('api/dashboard/', views.dashboard_data, name='dashboard_data'),

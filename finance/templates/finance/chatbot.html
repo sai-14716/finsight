@@ -1,0 +1,54 @@
+{% load static %}
+<div id="aiChatWidget" class="ai-chat-widget" role="dialog" aria-label="FinSIGHT Assistant">
+    <div class="ai-chat-card">
+        <header class="ai-chat-header">
+            <div class="ai-chat-title">
+                <img src="{% static 'finance/img/assistant-icon.svg' %}" alt="assistant" class="ai-chat-logo" onerror="this.style.display='none'" />
+                <div>
+                    <div class="ai-chat-name">FinSIGHT Assistant</div>
+                    <div class="ai-chat-sub">Ask about your finances</div>
+                </div>
+            </div>
+            <div class="ai-chat-actions">
+                <button id="aiNewSessionBtn" class="btn ai-btn-ghost">Chat with AI</button>
+                <button id="aiCloseBtn" class="btn ai-btn-ghost" title="Close">✕</button>
+            </div>
+        </header>
+
+        <div id="aiChatMessages" class="ai-chat-messages" aria-live="polite">
+            <div class="ai-chat-empty">Start a new session to receive a short financial snapshot.</div>
+        </div>
+
+        <form id="aiChatForm" class="ai-chat-input" onsubmit="return false;">
+            <input id="aiChatInput" type="text" placeholder="Ask about your finances..." autocomplete="off" />
+            <button id="aiSendBtn" class="btn btn-primary">Send</button>
+        </form>
+    </div>
+
+    <script src="{% static 'finance/js/chatbot.js' %}"></script>
+</div>
+
+<!-- Full screen overlay chat window (initially hidden) -->
+<div id="aiChatOverlay" class="ai-chat-overlay" aria-hidden="true">
+    <button id="aiOverlayCloseLeft" class="ai-overlay-close-left" aria-label="Close chat">✕</button>
+    <div class="ai-chat-overlay-card">
+        <header class="ai-chat-header">
+            <div class="ai-chat-title">
+                <div class="ai-chat-name">FinSIGHT Assistant</div>
+                <div class="ai-chat-sub">Full chat session</div>
+            </div>
+            <div class="ai-chat-actions">
+                <button id="aiOverlayNewSession" class="btn ai-btn-ghost">New Session</button>
+            </div>
+        </header>
+
+        <div id="aiOverlayMessages" class="ai-chat-messages" aria-live="polite">
+            <div class="ai-chat-empty">Start a new session to receive a short financial snapshot.</div>
+        </div>
+
+        <form id="aiOverlayForm" class="ai-chat-input" onsubmit="return false;">
+            <input id="aiOverlayInput" type="text" placeholder="Ask about your finances..." autocomplete="off" />
+            <button id="aiOverlaySend" class="btn btn-primary">Send</button>
+        </form>
+    </div>
+</div>

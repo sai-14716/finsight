@@ -28,8 +28,14 @@ from .services.time_series_analyzer import TimeSeriesAnalyzer, ForecastEngine
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
 import logging
+from .services.chatbot_service import get_chatbot_service
+import google.generativeai as genai
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+# Chatbot service (singleton)
+chat_service = get_chatbot_service()
 
 
 # ============================================================================
@@ -82,6 +88,133 @@ def logout_view(request):
     logout(request)
     messages.info(request, 'You have been logged out.')
     return redirect('login')
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def ai_chat_start(request):
+    print("Start a new chat session for the authenticated user and return initial AI insight")
+    try:
+        session_id, initial_text = chat_service.start_session(request.user)
+        return Response({"session_id": session_id, "initial": initial_text})
+    except Exception as e:
+        logger.exception("Failed to start AI chat session")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def ai_chat_message(request, session_id):
+    """Send a user message to an existing chat session and return assistant reply."""
+    message = request.data.get('message')
+    if not message:
+        return Response({"error": "No message provided"}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        # ownership check: ensure session belongs to requesting user
+        meta = chat_service.get_session_meta(session_id)
+        if not meta:
+            return Response({"error": "Session not found"}, status=status.HTTP_404_NOT_FOUND)
+        if meta.get('user_id') != request.user.id:
+            return Response({"error": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+        resp_text = chat_service.send_message(session_id, message)
+        return Response({"response": resp_text})
+    except ValueError:
+        return Response({"error": "Session not found"}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.exception("AI chat message handling failed")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def ai_chat_summarize(request, session_id):
+    """Generate a conversation summary and suggested goal updates for the session."""
+    try:
+        meta = chat_service.get_session_meta(session_id)
+        if not meta:
+            return Response({"error": "Session not found"}, status=status.HTTP_404_NOT_FOUND)
+        if meta.get('user_id') != request.user.id:
+            return Response({"error": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+        history = chat_service.get_history(session_id)
+        # Build a compact transcript
+        transcript = "\n".join([f"{m.get('role')}: {m.get('text')}" for m in history])
+
+        prompt = (
+            "You are FinSIGHT's assistant. Summarize the conversation and propose a single suggested change to the user's monthly savings goal (a numeric value) and an optional improvement to the goal description. "
+            "Return a JSON object with fields: suggested_goal (number, or null), suggested_description (string or null), summary (short text)."
+        )
+        full_prompt = prompt + "\n\nTRANSCRIPT:\n" + transcript
+
+        try:
+            # use the chatbot service's model if available
+            model = getattr(chat_service, 'model', None)
+            if model is not None:
+                resp = model.generate_content(full_prompt)
+                text = resp.text
+            else:
+                text = "AI model not available"
+        except Exception as e:
+            text = f"AI generation error: {e}"
+
+        # Try to parse JSON from AI; if fails, return raw text
+        suggested = None
+        try:
+            # attempt to find a JSON object inside text
+            import re
+            m = re.search(r"\{.*\}", text, re.S)
+            if m:
+                suggested = json.loads(m.group(0))
+        except Exception:
+            suggested = None
+
+        return Response({
+            'success': True,
+            'raw': text,
+            'parsed': suggested
+        })
+    except Exception as e:
+        logger.exception("Summarize failed")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def ai_chat_apply_goals(request, session_id):
+    """Apply suggested goal updates to the user's profile after confirmation.
+
+    Expects JSON body: { "monthly_savings_goal": 123.45, "goal_description": "..." }
+    """
+    try:
+        meta = chat_service.get_session_meta(session_id)
+        if not meta:
+            return Response({"error": "Session not found"}, status=status.HTTP_404_NOT_FOUND)
+        if meta.get('user_id') != request.user.id:
+            return Response({"error": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+        data = request.data
+        goal = data.get('monthly_savings_goal')
+        desc = data.get('goal_description')
+
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        changed = False
+        if goal is not None:
+            try:
+                profile.monthly_savings_goal = float(goal)
+                changed = True
+            except Exception:
+                return Response({"error": "Invalid goal value"}, status=status.HTTP_400_BAD_REQUEST)
+        if desc is not None:
+            profile.financial_goal_description = desc
+            changed = True
+        if changed:
+            profile.save()
+        return Response({"success": True, "changed": changed})
+    except Exception as e:
+        logger.exception("Apply goals failed")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
 
 
 # ============================================================================
@@ -586,12 +719,12 @@ def get_forecast(request):
 def generate_insights(request):
     """Generate AI-powered financial insights"""
     try:
-        ai_service = get_ai_insights_service()
-        insight = ai_service.generate_monthly_insight(request.user)
-        
+        # Replace one-shot insight generation with chat-based initial insight
+        session_id, initial_text = chat_service.start_session(request.user)
         return Response({
             'success': True,
-            'insight': insight
+            'session_id': session_id,
+            'insight': initial_text
         })
     except Exception as e:
         logger.error(f"Insights generation error: {str(e)}")
